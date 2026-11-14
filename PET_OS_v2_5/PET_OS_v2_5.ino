@@ -627,9 +627,9 @@ void drawSystem() {
   tft.setTextColor(C_MUTED,C_BG);
   tft.setCursor(123,291);
   tft.print("UTC OFFSET / NO DST");
-  tft.setTextColor(C_MUTED,C_BG);
-  tft.setCursor(14,66);
-  tft.print(ntpSynced ? "NTP CLOCK SYNCHRONIZED" : "NTP CLOCK WAITING");
+  tft.setTextColor(C_CYAN,C_BG);
+  tft.setCursor(19,107);
+  tft.print(ntpSynced ? "NTP SYNCED" : "NTP WAITING");
 }
 
 // -------------------- TOOLS SCREEN --------------------
@@ -1169,19 +1169,7 @@ void handleTouch(int x,int y) {
 
     if (y>=210 && y<=242) {
       if (x<120) {
-        if (strlen(WIFI_SSID)==0) {
-          setMessage("ЗАДАЙ WI-FI В СКЕТЧЕ");
-        } else {
-          ledError = false;
-
-          WiFi.mode(WIFI_STA);
-          WiFi.begin(WIFI_SSID,WIFI_PASSWORD);
-
-          wifiConnecting = true;
-          wifiAttemptAt = millis();
-
-          setMessage("ПОДКЛЮЧАЮ WI-FI...");
-        }
+        beginWifiConnection();
       } else {
         savePet();
         setMessage("ДАННЫЕ СОХРАНЕНЫ");
