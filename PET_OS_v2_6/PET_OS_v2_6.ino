@@ -190,6 +190,7 @@ void drawWeatherIcon(int x,int y);
 String moodName(Mood m);
 String weatherReport();
 Mood choosePetMood();
+bool updateWeather();
 
 void drawTopBar() {
   tft.fillRect(0, 0, 240, 31, C_BG);
@@ -630,10 +631,10 @@ void drawPetScreen() {
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,146); tft.printf("%u%%",pet.energy);
   drawStatBar(14,180,"HEALTH",pet.health,C_GREEN);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,180); tft.printf("%u%%",pet.health);
-  drawNeonButton(10,211,105,30,"ПОКОРМИТЬ",C_YELLOW);
-  drawNeonButton(125,211,105,30,"ПОГЛАДИТЬ",C_PINK);
-  drawNeonButton(10,247,105,30,"ПОИГРАТЬ",C_CYAN);
-  drawNeonButton(125,247,105,30,"СПАТЬ",C_PURPLE);
+  drawNeonButton(10,211,105,30,"FEED",C_YELLOW);
+  drawNeonButton(125,211,105,30,"PET",C_PINK);
+  drawNeonButton(10,247,105,30,"PLAY",C_CYAN);
+  drawNeonButton(125,247,105,30,"SLEEP",C_PURPLE);
   drawNeonButton(8,282,65,28,"BACK",C_PINK);
   tft.setTextColor(C_MUTED,C_BG); tft.setCursor(82,291); tft.print("CARE FOR YOUR PET");
 }
