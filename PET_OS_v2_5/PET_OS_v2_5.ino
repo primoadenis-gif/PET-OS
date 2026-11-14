@@ -879,6 +879,9 @@ void resetToDefaults() {
   prefs.clear();
   prefs.end();
   prefs.begin("petcal",false);prefs.clear();prefs.end();
+  prefs.begin("petwx",false);prefs.clear();prefs.end();
+  weatherValid=false;weatherLocationValid=false;
+  weatherCode=-1;weatherText="WEATHER: OFFLINE";
   touchRawXMin=TOUCH_RAW_X_MIN;touchRawXMax=TOUCH_RAW_X_MAX;
   touchRawYMin=TOUCH_RAW_Y_MIN;touchRawYMax=TOUCH_RAW_Y_MAX;
 
