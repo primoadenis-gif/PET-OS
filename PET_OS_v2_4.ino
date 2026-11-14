@@ -1,5 +1,5 @@
 /*
-  PET OS v2.4 — Productivity
+  PET OS v2.5 — Connected
   Board: ESP32-2432S024R (2.4" CYD, ILI9341 + XPT2046)
   Portrait UI: 240 x 320
 
@@ -23,6 +23,9 @@
 #include <WiFi.h>
 #include <time.h>
 #include <sys/time.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include "PetSprites.h"
@@ -123,9 +126,21 @@ String dateText = "--.--";
 uint32_t lastClockDraw = 0;
 uint32_t lastToolRefresh = 0;
 
-// Set credentials below to enable Wi-Fi.
-const char* WIFI_SSID = "Rough";
-const char* WIFI_PASSWORD = "44404440";
+// Credentials are stored in Preferences. Configure: wifi <SSID>|<PASSWORD>
+String wifiSsid, wifiPassword;
+bool ntpSynced=false;
+uint32_t lastNtpCheck=0;
+float weatherLat=0, weatherLon=0, weatherTemp=0;
+int weatherCode=-1;
+bool weatherLocationValid=false, weatherValid=false;
+String weatherCity="", weatherText="WEATHER: OFFLINE";
+uint32_t lastWeatherAttempt=0;
+static constexpr uint32_t WEATHER_INTERVAL=30UL*60UL*1000UL;
+int touchRawXMin=TOUCH_RAW_X_MIN, touchRawXMax=TOUCH_RAW_X_MAX;
+int touchRawYMin=TOUCH_RAW_Y_MIN, touchRawYMax=TOUCH_RAW_Y_MAX;
+bool calibrationActive=false;
+uint8_t calibrationStep=0;
+int calMinX=4095,calMaxX=0,calMinY=4095,calMaxY=0;
 
 Mood currentMood = HAPPY;
 PetAction petAction = ACT_IDLE;
@@ -423,6 +438,11 @@ void drawHomeDynamic() {
 
   drawCyrillicCentered(statusMessage, 109, 56, 118,
                        C_WHITE, C_PANEL);
+  tft.fillRect(8,82,224,13,C_BG);
+  tft.setTextSize(1);
+  tft.setTextColor(weatherValid ? C_CYAN : C_MUTED,C_BG);
+  tft.setCursor(12,84);
+  tft.print(weatherText);
 
   tft.fillRect(95, 125, 48, 48, C_BG);
   drawPet(119, 149, idleFrame, currentMood);
@@ -600,14 +620,16 @@ void drawSystem() {
   drawNeonButton(124,210,106,32,"SAVE DATA",C_GREEN);
 
   drawNeonButton(10,249,106,28,
-                 resetArmed ? "CONFIRM RESET" : "RESET DEVICE",
-                 C_RED);
-
+                 resetArmed ? "CONFIRM RESET" : "RESET DEVICE",C_RED);
+  drawNeonButton(124,249,106,28,"TOUCH CAL",C_CYAN);
   drawNeonButton(8,282,65,28,"BACK",C_PINK);
 
   tft.setTextColor(C_MUTED,C_BG);
   tft.setCursor(123,291);
   tft.print("UTC OFFSET / NO DST");
+  tft.setTextColor(C_CYAN,C_BG);
+  tft.setCursor(14,236);
+  tft.print(ntpSynced ? "NTP: SYNCED" : "NTP: WAITING");
 }
 
 // -------------------- TOOLS SCREEN --------------------
@@ -856,6 +878,9 @@ void resetToDefaults() {
   prefs.begin("petos",false);
   prefs.clear();
   prefs.end();
+  prefs.begin("petcal",false);prefs.clear();prefs.end();
+  touchRawXMin=TOUCH_RAW_X_MIN;touchRawXMax=TOUCH_RAW_X_MAX;
+  touchRawYMin=TOUCH_RAW_Y_MIN;touchRawYMax=TOUCH_RAW_Y_MAX;
 
   pet = {75,85,90,100,0,1,0,0,false,false,false};
 
@@ -889,6 +914,7 @@ void resetToDefaults() {
 
   WiFi.mode(WIFI_OFF);
   wifiEnabled = false;
+  wifiSsid="";wifiPassword="";saveNetworkSettings();
 
   savePet();
 
@@ -916,8 +942,8 @@ bool readTouch(int &x, int &y) {
     ry = tmp;
   }
 
-  int sx = map(rx, TOUCH_RAW_X_MIN, TOUCH_RAW_X_MAX, 0, 239);
-  int sy = map(ry, TOUCH_RAW_Y_MIN, TOUCH_RAW_Y_MAX, 0, 319);
+  int sx = map(rx, touchRawXMin, touchRawXMax, 0, 239);
+  int sy = map(ry, touchRawYMin, touchRawYMax, 0, 319);
 
   if (TOUCH_INVERT_X) sx = 239-sx;
   if (TOUCH_INVERT_Y) sy = 319-sy;
@@ -938,14 +964,13 @@ void writeRgb(uint8_t r,uint8_t g,uint8_t b) {
     return RGB_LED_COMMON_ANODE ? 255-v : v;
   };
 
-  analogWrite(LED_RED,
-              cv((uint16_t)r*ledBrightness/255));
-
-  analogWrite(LED_GREEN,
-              cv((uint16_t)g*ledBrightness/255));
-
-  analogWrite(LED_BLUE,
-              cv((uint16_t)b*ledBrightness/255));
+  uint8_t rr=cv((uint16_t)r*ledBrightness/255);
+  uint8_t gg=cv((uint16_t)g*ledBrightness/255);
+  uint8_t bb=cv((uint16_t)b*ledBrightness/255);
+  static int oldR=-1,oldG=-1,oldB=-1;
+  if(rr==oldR&&gg==oldG&&bb==oldB)return;
+  oldR=rr;oldG=gg;oldB=bb;
+  analogWrite(LED_RED,rr);analogWrite(LED_GREEN,gg);analogWrite(LED_BLUE,bb);
 }
 
 void updateRgbLed() {
@@ -1163,6 +1188,11 @@ void handleTouch(int x,int y) {
       return;
     }
 
+    if (y>=249 && y<=278 && x>=120) {
+      startTouchCalibration();
+      return;
+    }
+
     if (y>=249 && y<=278 && x<120) {
       if (!resetArmed || millis()>resetArmUntil) {
         resetArmed = true;
@@ -1210,10 +1240,9 @@ void updatePet() {
       wifiConnecting = false;
       ledError = false;
 
-      configTime(0,0,
-                 "pool.ntp.org",
-                 "time.nist.gov");
-
+      configTime(0,0,"pool.ntp.org","time.nist.gov");
+      lastNtpCheck=now;
+      ntpSynced=false;
       setMessage("WI-FI ПОДКЛЮЧЁН");
       dirty = true;
     } else if (now-wifiAttemptAt>15000UL) {
@@ -1223,6 +1252,12 @@ void updatePet() {
       setMessage("НЕТ СВЯЗИ WI-FI");
       dirty = true;
     }
+  }
+
+  if (WiFi.status()==WL_CONNECTED && now-lastNtpCheck>5000UL) {
+    lastNtpCheck=now;
+    ntpSynced=time(nullptr)>1700000000;
+    if (ntpSynced && lastWeatherAttempt==0) lastWeatherAttempt=now-WEATHER_INTERVAL;
   }
 
   if (WiFi.status()==WL_CONNECTED &&
@@ -1273,7 +1308,137 @@ void updatePet() {
     petFrameDirty = true;
   }
 
+  if (WiFi.status()==WL_CONNECTED && ntpSynced &&
+      now-lastWeatherAttempt>=WEATHER_INTERVAL) {
+    lastWeatherAttempt=now;
+    updateWeather();
+  }
   updateRgbLed();
+}
+
+// -------------------- NETWORK / WEATHER / CALIBRATION --------------------
+
+String weatherDescription(int c) {
+  if(c==0)return "CLEAR";
+  if(c<=2)return "PARTLY CLOUDY";
+  if(c==3)return "CLOUDY";
+  if(c==45||c==48)return "FOG";
+  if(c>=51&&c<=67)return "RAIN";
+  if(c>=71&&c<=77)return "SNOW";
+  if(c>=80&&c<=82)return "SHOWERS";
+  if(c>=85&&c<=86)return "SNOW SHOWERS";
+  if(c>=95)return "THUNDERSTORM";
+  return "WEATHER";
+}
+
+void saveNetworkSettings() {
+  prefs.begin("petnet",false);
+  prefs.putString("ssid",wifiSsid);
+  prefs.putString("pass",wifiPassword);
+  prefs.end();
+}
+void loadNetworkSettings() {
+  prefs.begin("petnet",true);
+  wifiSsid=prefs.getString("ssid","");
+  wifiPassword=prefs.getString("pass","");
+  prefs.end();
+  prefs.begin("petcal",true);
+  touchRawXMin=prefs.getInt("xmin",TOUCH_RAW_X_MIN);
+  touchRawXMax=prefs.getInt("xmax",TOUCH_RAW_X_MAX);
+  touchRawYMin=prefs.getInt("ymin",TOUCH_RAW_Y_MIN);
+  touchRawYMax=prefs.getInt("ymax",TOUCH_RAW_Y_MAX);
+  prefs.end();
+}
+void beginWifiConnection() {
+  if(!wifiSsid.length()) {
+    Serial.println("Configure Wi-Fi: wifi <SSID>|<PASSWORD>");
+    setMessage("НАСТРОЙ WI-FI В SERIAL"); dirty=true; return;
+  }
+  WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(true);
+  WiFi.begin(wifiSsid.c_str(),wifiPassword.c_str());
+  wifiConnecting=true; wifiAttemptAt=millis(); ledError=false;
+  setMessage("ПОДКЛЮЧАЮ WI-FI..."); dirty=true;
+}
+bool httpsGetJson(const String &url,JsonDocument &doc) {
+  WiFiClientSecure client; client.setInsecure();
+  HTTPClient http; http.setTimeout(3500); http.setConnectTimeout(3500);
+  if(!http.begin(client,url))return false;
+  int code=http.GET(); bool ok=false;
+  if(code==HTTP_CODE_OK) ok=!deserializeJson(doc,http.getStream());
+  http.end(); return ok;
+}
+bool updateWeather() {
+  if(WiFi.status()!=WL_CONNECTED)return false;
+  if(!weatherLocationValid) {
+    JsonDocument geo;
+    if(!httpsGetJson("https://ipwho.is/",geo)||!geo["success"].as<bool>()) {
+      weatherText="WEATHER: GEO FAILED"; dirty=true; return false;
+    }
+    weatherLat=geo["latitude"]|0.0f; weatherLon=geo["longitude"]|0.0f;
+    weatherCity=String((const char*)(geo["city"]|"NEARBY"));
+    weatherLocationValid=(weatherLat!=0.0f||weatherLon!=0.0f);
+    if(!weatherLocationValid)return false;
+  }
+  String url="https://api.open-meteo.com/v1/forecast?latitude="+String(weatherLat,4)+
+    "&longitude="+String(weatherLon,4)+"&current=temperature_2m,weather_code&timezone=UTC";
+  JsonDocument wx;
+  if(!httpsGetJson(url,wx)) { if(!weatherValid)weatherText="WEATHER: UPDATE FAILED"; dirty=true; return false; }
+  JsonObject cur=wx["current"];
+  if(cur.isNull())return false;
+  weatherTemp=cur["temperature_2m"]|0.0f;
+  weatherCode=cur["weather_code"]|-1;
+  weatherValid=weatherCode>=0; if(!weatherValid)return false;
+  weatherText=weatherCity+" "+String(weatherTemp,1)+" C "+weatherDescription(weatherCode);
+  prefs.begin("petwx",false);
+  prefs.putFloat("lat",weatherLat); prefs.putFloat("lon",weatherLon);
+  prefs.putString("city",weatherCity); prefs.putFloat("temp",weatherTemp);
+  prefs.putInt("code",weatherCode); prefs.end();
+  dirty=true; Serial.println("Weather: "+weatherText); return true;
+}
+void loadCachedWeather() {
+  prefs.begin("petwx",true);
+  weatherLat=prefs.getFloat("lat",0); weatherLon=prefs.getFloat("lon",0);
+  weatherCity=prefs.getString("city",""); weatherTemp=prefs.getFloat("temp",0);
+  weatherCode=prefs.getInt("code",-1); prefs.end();
+  weatherLocationValid=(weatherLat!=0.0f||weatherLon!=0.0f);
+  weatherValid=weatherCode>=0;
+  if(weatherValid)weatherText=weatherCity+" "+String(weatherTemp,1)+" C "+
+    weatherDescription(weatherCode)+" (CACHED)";
+}
+void drawCalibrationTarget() {
+  tft.fillScreen(C_BG); tft.setTextSize(1); tft.setTextColor(C_WHITE,C_BG);
+  tft.setCursor(12,12); tft.print("TOUCH CALIBRATION");
+  tft.setTextColor(C_MUTED,C_BG); tft.setCursor(12,28); tft.print("Tap target center");
+  const int tx[4]={20,220,220,20},ty[4]={35,35,295,295};
+  tft.drawCircle(tx[calibrationStep],ty[calibrationStep],10,C_PINK);
+  tft.drawFastHLine(tx[calibrationStep]-14,ty[calibrationStep],28,C_CYAN);
+  tft.drawFastVLine(tx[calibrationStep],ty[calibrationStep]-14,28,C_CYAN);
+  tft.setCursor(12,310); tft.printf("Point %u / 4",calibrationStep+1);
+}
+void startTouchCalibration() {
+  calibrationActive=true; calibrationStep=0;
+  calMinX=4095;calMaxX=0;calMinY=4095;calMaxY=0;
+  drawCalibrationTarget(); Serial.println("Touch calibration started.");
+}
+void acceptCalibrationTouch() {
+  if(!touch.touched())return;
+  TS_Point p=touch.getPoint(); int rx=p.x,ry=p.y;
+  if(TOUCH_SWAP_XY){int z=rx;rx=ry;ry=z;}
+  calMinX=min(calMinX,rx);calMaxX=max(calMaxX,rx);
+  calMinY=min(calMinY,ry);calMaxY=max(calMaxY,ry);
+  while(touch.touched())delay(5);
+  if(++calibrationStep<4){drawCalibrationTarget();return;}
+  if(calMaxX-calMinX<500||calMaxY-calMinY<500) {
+    Serial.println("Calibration failed; old values retained.");
+  } else {
+    touchRawXMin=calMinX;touchRawXMax=calMaxX;
+    touchRawYMin=calMinY;touchRawYMax=calMaxY;
+    prefs.begin("petcal",false);
+    prefs.putInt("xmin",touchRawXMin);prefs.putInt("xmax",touchRawXMax);
+    prefs.putInt("ymin",touchRawYMin);prefs.putInt("ymax",touchRawYMax);
+    prefs.end(); setMessage("ТАЧСКРИН НАСТРОЕН");
+  }
+  calibrationActive=false;currentScreen=SYSTEM;screenChanged=true;dirty=true;
 }
 
 // -------------------- COLOR TEST --------------------
@@ -1354,6 +1519,8 @@ void setup() {
   touch.setRotation(0);
 
   loadPet();
+  loadNetworkSettings();
+  loadCachedWeather();
 
   bootMillis = millis();
   lastTick = millis();
@@ -1364,15 +1531,10 @@ void setup() {
   setMessage("ПОМОЩНИК ГОТОВ!");
 
   Serial.println();
-  Serial.println("PET OS v2.4 Productivity ready.");
+  Serial.println("PET OS v2.5 Connected ready.");
 
-  Serial.println(
-    "Serial: help, tasks, add <text>, edit <n> <text>, "
-    "del <n>, done <n>, note <text>, notes, delnote <n>, "
-    "tz <+/-HH:MM>, led on/off, brightness <0-255>, "
-    "reset yes, c, h"
-  );
-
+  Serial.println("Serial: help, wifi <SSID>|<PASSWORD>, weather, calibrate, tasks, notes, led, tz, reset yes");
+  if(wifiSsid.length())beginWifiConnection();
   updateRgbLed();
 }
 
@@ -1438,8 +1600,24 @@ void processSerialLine(String line) {
 
   if (line=="help") {
     printHelp();
+    Serial.println("wifi <SSID>|<PASSWORD> - save Wi-Fi and connect");
+    Serial.println("wifi clear | weather | calibrate");
     return;
   }
+  if(line.startsWith("wifi ")) {
+    String a=line.substring(5);
+    if(a=="clear") {
+      wifiSsid="";wifiPassword="";saveNetworkSettings();
+      WiFi.disconnect(true);WiFi.mode(WIFI_OFF);wifiConnecting=false;
+      Serial.println("Wi-Fi settings erased.");return;
+    }
+    int p=a.indexOf('|');
+    if(p<=0||p>=a.length()-1){Serial.println("Usage: wifi <SSID>|<PASSWORD>");return;}
+    wifiSsid=a.substring(0,p);wifiPassword=a.substring(p+1);wifiSsid.trim();
+    saveNetworkSettings();Serial.println("Credentials saved.");beginWifiConnection();return;
+  }
+  if(line=="weather"){if(!updateWeather())Serial.println("Weather update failed.");return;}
+  if(line=="calibrate"){startTouchCalibration();return;}
 
   if (line=="tasks") {
     for (uint8_t i=0; i<taskCount; i++) {
@@ -1686,13 +1864,9 @@ void loop() {
     }
   }
 
-  if (colorTestActive) {
-    delay(8);
-    return;
-  }
-
+  if (colorTestActive) { delay(8); return; }
+  if(calibrationActive){acceptCalibrationTouch();delay(12);return;}
   updatePet();
-
   int x, y;
 
   if (millis()-lastTouch>220 && readTouch(x,y)) {
