@@ -28,7 +28,7 @@
 #include <ArduinoJson.h>
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
-#include "PetSprites.h"
+#include "NixiSprites.h"
 
 // -------------------- BOARD PINS: ESP32-2432S024R --------------------
 static constexpr int PIN_TFT_SCLK = 14;
@@ -257,60 +257,50 @@ void drawHeart(int x, int y, uint16_t c) {
 
 static constexpr uint16_t SPRITE_TRANSPARENT = 0x0001;
 static uint8_t idleFrame = 0;
+static uint8_t roomFrame = 0;
+static uint8_t nixiActionFrame = 0;
+static int8_t activeNixiAction = -1;
+static uint32_t nixiActionUntil = 0;
 static uint32_t lastIdleFrame = 0;
-static uint32_t idleCycle = 0;
+static uint32_t lastRoomFrame = 0;
+static uint32_t lastActionFrame = 0;
 
-void drawPet(int cx, int cy, uint8_t frame, Mood mood) {
-  uint8_t m = (uint8_t)mood;
-  if (m > 7) m = HAPPY;
+void setNixiAction(NixiAction action, uint32_t duration=1100UL) {
+  activeNixiAction = (int8_t)action;
+  nixiActionFrame = 0;
+  nixiActionUntil = millis() + duration;
+  lastActionFrame = millis();
+  dirty = true;
+}
 
-  uint8_t f = frame & 3;
-  const uint16_t *sprite = &PET_SPRITES[m][f][0];
+NixiEmotion nixiEmotionForMood(Mood mood) {
+  switch (mood) {
+    case HAPPY: return NIXI_HAPPY;
+    case CURIOUS: return NIXI_CURIOUS;
+    case SLEEPY: return NIXI_SLEEPY;
+    case SAD: return NIXI_SAD;
+    case EXCITED: return NIXI_SURPRISED;
+    case LOVE: return NIXI_LOVE;
+    case ANGRY: return NIXI_ANGRY;
+    case CONFUSED: return NIXI_EMBARRASSED;
+    default: return NIXI_HAPPY;
+  }
+}
 
-  uint16_t runBuffer[48];
-
-  const int left = cx - 24;
-  const int top = cy - 24;
-
-  for (int sy = 0; sy < 48; sy++) {
-    int sx = 0;
-
-    while (sx < 48) {
-      while (sx < 48 &&
-             pgm_read_word(&sprite[sy * 48 + sx]) == SPRITE_TRANSPARENT)
-        sx++;
-
-      if (sx >= 48) break;
-
-      int runStart = sx;
-      int runLength = 0;
-
-      while (sx < 48) {
-        uint16_t pixel = pgm_read_word(&sprite[sy * 48 + sx]);
-
-        if (pixel == SPRITE_TRANSPARENT) break;
-
-        runBuffer[runLength++] = pixel;
-        sx++;
-      }
-
-      int drawX = left + runStart;
-      int drawY = top + sy;
-
-      if (drawX >= 0 && drawY >= 0 &&
-          drawX + runLength <= tft.width() &&
-          drawY < tft.height()) {
-        tft.pushImage(drawX, drawY, runLength, 1, runBuffer);
-      }
-    }
+void drawNixiCharacter() {
+  const int nx = 88;
+  const int ny = 104;
+  if (activeNixiAction >= 0 && millis() < nixiActionUntil) {
+    drawNixiAction(tft, nx, ny, (NixiAction)activeNixiAction, nixiActionFrame);
+  } else if (currentMood == HAPPY) {
+    drawNixiIdle(tft, nx, ny, idleFrame);
+  } else {
+    drawNixiEmotion(tft, nx, ny, nixiEmotionForMood(currentMood));
   }
 }
 
 void drawRoomBackground() {
-  tft.fillScreen(C_BG);
-  tft.drawFastHLine(10, 229, 220, C_PANEL2);
-  tft.drawPixel(8, 40, C_CYAN);
-  tft.drawPixel(231, 40, C_PINK);
+  drawNixiRoom(tft, roomFrame);
 }
 
 // -------------------- CYRILLIC FONT --------------------
@@ -432,48 +422,8 @@ void drawCyrillicCentered(const String &value, int x, int y,
 // -------------------- HOME SCREEN --------------------
 
 void drawHomeDynamic() {
-  drawTopBar();
-
-  tft.fillRoundRect(8, 43, 224, 35, 5, C_PANEL);
-  tft.drawRoundRect(8, 43, 224, 35, 5, C_PURPLE);
-
-  drawCyrillicCentered(statusMessage, 12, 56, 216,
-                       C_WHITE, C_PANEL);
-  tft.fillRect(95, 125, 48, 48, C_BG);
-  drawPet(119, 149, idleFrame, currentMood);
-
-  tft.fillRoundRect(8, 190, 224, 43, 5, C_PANEL);
-  tft.drawRoundRect(8, 190, 224, 43, 5, C_GREEN);
-
-  tft.setTextSize(1);
-  tft.setTextColor(C_MUTED, C_PANEL);
-  tft.setCursor(17, 199);
-  tft.print("NEXT TASK");
-
-  tft.setTextColor(C_WHITE, C_PANEL);
-  tft.setCursor(17, 214);
-
-  String next = "ВСЁ ВЫПОЛНЕНО";
-
-  for (uint8_t i=0; i<taskCount; ++i) {
-    if (!tasks[i].done) {
-      next = tasks[i].title;
-      break;
-    }
-  }
-
-  if (next.length() > 58)
-    next = next.substring(0,58);
-
-  drawCyrillicText(next,17,214,C_WHITE,C_PANEL,34);
-
-  tft.fillRect(8, 237, 224, 14, C_BG);
-
-  tft.setTextColor(C_MUTED,C_BG); tft.setCursor(10,240); tft.print("СОСТОЯНИЕ:");
-  drawCyrillicText(moodName(currentMood),82,240,C_CYAN,C_BG,24);
-}
-
-void drawHome() {
+  // Repaint the animated room first. Character and interface are then drawn
+  // over it, so no old sprite pixels remain between animation frames.
   drawRoomBackground();
   drawTopBar();
 
@@ -482,6 +432,36 @@ void drawHome() {
   drawNeonButton(99, 260, 66, 43, "MEMORY", C_PURPLE);
   drawNeonButton(168, 260, 66, 43, "SYSTEM", C_GREEN);
 
+  tft.fillRoundRect(8, 43, 224, 35, 5, C_PANEL);
+  tft.drawRoundRect(8, 43, 224, 35, 5, C_PURPLE);
+  drawCyrillicCentered(statusMessage, 12, 56, 216, C_WHITE, C_PANEL);
+
+  drawNixiCharacter();
+
+  tft.fillRoundRect(8, 190, 224, 43, 5, C_PANEL);
+  tft.drawRoundRect(8, 190, 224, 43, 5, C_GREEN);
+  tft.setTextSize(1);
+  tft.setTextColor(C_MUTED, C_PANEL);
+  tft.setCursor(17, 199);
+  tft.print("NEXT TASK");
+  tft.setTextColor(C_WHITE, C_PANEL);
+  tft.setCursor(17, 214);
+
+  String next = "ВСЁ ВЫПОЛНЕНО";
+  for (uint8_t i=0; i<taskCount; ++i) {
+    if (!tasks[i].done) { next = tasks[i].title; break; }
+  }
+  if (next.length() > 58) next = next.substring(0,58);
+  drawCyrillicText(next,17,214,C_WHITE,C_PANEL,34);
+
+  tft.fillRect(8, 237, 224, 14, C_BG);
+  tft.setTextColor(C_MUTED,C_BG);
+  tft.setCursor(10,240);
+  tft.print("СОСТОЯНИЕ:");
+  drawCyrillicText(moodName(currentMood),82,240,C_CYAN,C_BG,24);
+}
+
+void drawHome() {
   drawHomeDynamic();
 }
 
@@ -1025,7 +1005,7 @@ void handleTouch(int x,int y) {
     if(y>=211 && y<=241){
       if(x<120){pet.hunger=min(100,(int)pet.hunger+28);pet.happiness=min(100,(int)pet.happiness+4);pet.energy=max(0,(int)pet.energy-2);currentMood=LOVE;setMessage("НЯМ-НЯМ! СПАСИБО!");}
       else{pet.happiness=min(100,(int)pet.happiness+18);currentMood=LOVE;setMessage("МУРРР... КАК ПРИЯТНО!");}
-      pet.careCount++;savePet();dirty=true;return;
+      setNixiAction(NIXI_PRAISE);setNixiAction(NIXI_PLAY,1500UL);setNixiAction(NIXI_REST,1800UL);pet.careCount++;savePet();dirty=true;return;
     }
     if(y>=247 && y<=277){
       if(x<120){pet.happiness=min(100,(int)pet.happiness+20);pet.energy=max(0,(int)pet.energy-15);pet.hunger=max(0,(int)pet.hunger-5);currentMood=EXCITED;setMessage("УРА! ДАВАЙ ЕЩЁ!");}
@@ -1192,11 +1172,26 @@ void updatePet() {
     currentMood=choosePetMood(); savePet(); dirty=true;
   }
   if(currentScreen==PET && now-lastIdleFrame>=1000UL){lastIdleFrame=now;dirty=true;}
-  if (currentScreen==HOME &&
-      now-lastIdleFrame>=260UL) {
+  if (activeNixiAction >= 0) {
+    if (now >= nixiActionUntil) {
+      activeNixiAction = -1;
+      dirty = true;
+    } else if (now-lastActionFrame >= 180UL) {
+      lastActionFrame = now;
+      nixiActionFrame = (nixiActionFrame+1)%3;
+      dirty = true;
+    }
+  }
+
+  if (currentScreen==HOME && now-lastIdleFrame>=260UL) {
     lastIdleFrame = now;
-    idleFrame = (idleFrame+1)&3;
-    petFrameDirty = true;
+    idleFrame = (idleFrame+1)%NIXI_IDLE_COUNT;
+    dirty = true;
+  }
+  if (currentScreen==HOME && now-lastRoomFrame>=900UL) {
+    lastRoomFrame = now;
+    roomFrame = (roomFrame+1)%NIXI_ROOM_COUNT;
+    dirty = true;
   }
 
   if (WiFi.status()==WL_CONNECTED && ntpSynced &&
@@ -1781,8 +1776,7 @@ void loop() {
     petFrameDirty = false;
 
   } else if (petFrameDirty && currentScreen==HOME) {
-    tft.fillRect(95,125,48,48,C_BG);
-    drawPet(119,149,idleFrame,currentMood);
+    dirty = true;
     petFrameDirty = false;
   }
 
