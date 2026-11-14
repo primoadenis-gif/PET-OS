@@ -1350,42 +1350,109 @@ void beginWifiConnection() {
   wifiConnecting=true; wifiAttemptAt=millis(); ledError=false;
   setMessage("ПОДКЛЮЧАЮ WI-FI..."); dirty=true;
 }
-bool httpsGetJson(const String &url,JsonDocument &doc) {
-  WiFiClientSecure client; client.setInsecure();
-  HTTPClient http; http.setTimeout(3500); http.setConnectTimeout(3500);
-  if(!http.begin(client,url))return false;
-  int code=http.GET(); bool ok=false;
-  if(code==HTTP_CODE_OK) ok=!deserializeJson(doc,http.getStream());
-  http.end(); return ok;
+bool httpsGetJson(const String &url,JsonDocument &doc,const char *stage) {
+  WiFiClientSecure client;
+  client.setInsecure(); // HTTPS encrypted; server certificate is not verified.
+  HTTPClient http;
+  http.setTimeout(12000);
+  http.setConnectTimeout(12000);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+  Serial.printf("[WEATHER] %s: connecting...\\n",stage);
+  if(!http.begin(client,url)) {
+    Serial.printf("[WEATHER] %s: http.begin() failed\\n",stage);
+    return false;
+  }
+
+  int code=http.GET();
+  Serial.printf("[WEATHER] %s: HTTP status %d\\n",stage,code);
+  if(code!=HTTP_CODE_OK) {
+    if(code<0) Serial.printf("[WEATHER] %s: %s\\n",stage,http.errorToString(code).c_str());
+    String body=http.getString();
+    if(body.length()) Serial.println(body.substring(0,240));
+    http.end();
+    return false;
+  }
+
+  String body=http.getString();
+  http.end();
+  DeserializationError err=deserializeJson(doc,body);
+  if(err) {
+    Serial.printf("[WEATHER] %s: JSON parse failed: %s\\n",stage,err.c_str());
+    Serial.println(body.substring(0,240));
+    return false;
+  }
+  return true;
 }
+
 bool updateWeather() {
-  if(WiFi.status()!=WL_CONNECTED)return false;
+  if(WiFi.status()!=WL_CONNECTED) {
+    Serial.printf("[WEATHER] Wi-Fi not connected, status=%d\\n",(int)WiFi.status());
+    return false;
+  }
+
   if(!weatherLocationValid) {
     JsonDocument geo;
-    if(!httpsGetJson("https://ipwho.is/",geo)||!geo["success"].as<bool>()) {
-      weatherText="WEATHER: GEO FAILED"; dirty=true; return false;
+    if(!httpsGetJson("https://ipwho.is/",geo,"IP GEOLOCATION")) {
+      weatherText="WEATHER: GEO REQUEST FAILED"; dirty=true; return false;
     }
-    weatherLat=geo["latitude"]|0.0f; weatherLon=geo["longitude"]|0.0f;
+    if(!geo["success"].as<bool>()) {
+      const char *reason=geo["message"]|"unknown geolocation error";
+      Serial.printf("[WEATHER] Geolocation rejected: %s\\n",reason);
+      weatherText="WEATHER: GEO REJECTED"; dirty=true; return false;
+    }
+    weatherLat=geo["latitude"]|0.0f;
+    weatherLon=geo["longitude"]|0.0f;
     weatherCity=String((const char*)(geo["city"]|"NEARBY"));
     weatherLocationValid=(weatherLat!=0.0f||weatherLon!=0.0f);
-    if(!weatherLocationValid)return false;
+    if(!weatherLocationValid) {
+      Serial.println("[WEATHER] Geolocation returned invalid coordinates.");
+      weatherText="WEATHER: BAD LOCATION"; dirty=true; return false;
+    }
+    Serial.printf("[WEATHER] Location: %s, %.4f, %.4f\\n",
+                  weatherCity.c_str(),weatherLat,weatherLon);
   }
+
   String url="https://api.open-meteo.com/v1/forecast?latitude="+String(weatherLat,4)+
     "&longitude="+String(weatherLon,4)+"&current=temperature_2m,weather_code&timezone=UTC";
   JsonDocument wx;
-  if(!httpsGetJson(url,wx)) { if(!weatherValid)weatherText="WEATHER: UPDATE FAILED"; dirty=true; return false; }
+  if(!httpsGetJson(url,wx,"OPEN-METEO")) {
+    if(!weatherValid) weatherText="WEATHER: API REQUEST FAILED";
+    dirty=true; return false;
+  }
+
+  if(wx["error"].as<bool>()) {
+    const char *reason=wx["reason"]|"unknown API error";
+    Serial.printf("[WEATHER] Open-Meteo rejected request: %s\\n",reason);
+    if(!weatherValid) weatherText="WEATHER: API REJECTED";
+    dirty=true; return false;
+  }
+
   JsonObject cur=wx["current"];
-  if(cur.isNull())return false;
+  if(cur.isNull()) {
+    Serial.println("[WEATHER] Open-Meteo response has no 'current' object.");
+    if(!weatherValid) weatherText="WEATHER: NO CURRENT DATA";
+    dirty=true; return false;
+  }
+
   weatherTemp=cur["temperature_2m"]|0.0f;
   weatherCode=cur["weather_code"]|-1;
-  weatherValid=weatherCode>=0; if(!weatherValid)return false;
+  weatherValid=weatherCode>=0;
+  if(!weatherValid) {
+    Serial.println("[WEATHER] Missing or invalid current.weather_code.");
+    if(!weatherValid) weatherText="WEATHER: BAD API DATA";
+    dirty=true; return false;
+  }
+
   weatherText=weatherCity+" "+String(weatherTemp,1)+" C "+weatherDescription(weatherCode);
-  if(weatherText.length()>35)weatherText=weatherText.substring(0,35);
+  if(weatherText.length()>35) weatherText=weatherText.substring(0,35);
   prefs.begin("petwx",false);
   prefs.putFloat("lat",weatherLat); prefs.putFloat("lon",weatherLon);
   prefs.putString("city",weatherCity); prefs.putFloat("temp",weatherTemp);
   prefs.putInt("code",weatherCode); prefs.end();
-  dirty=true; Serial.println("Weather: "+weatherText); return true;
+  dirty=true;
+  Serial.println("[WEATHER] Updated: "+weatherText);
+  return true;
 }
 void loadCachedWeather() {
   prefs.begin("petwx",true);
