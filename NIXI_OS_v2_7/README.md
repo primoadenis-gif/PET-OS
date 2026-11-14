@@ -27,3 +27,15 @@ Pin mapping, TFT inversion, touch transform and RGB LED settings are inherited u
 
 ## Build status
 Source prepared on branch `feature/petos-v2.7-nixi`. It has not been compiled in Arduino IDE or tested on physical hardware yet.
+
+
+## Nixi sprite integration
+
+The v2.7 sketch now uses the Nixi sprite renderer and animated room:
+- `NixiSprites.h` is required beside `NIXI_OS_v2_7.ino`.
+- Replace the legacy `PetSprites.h` dependency; it is no longer included by the sketch.
+- HOME renders a 64x80 Nixi character over the 240x320 room, with 6 idle frames and 3 room frames.
+- Mood values map to the 8 expression sprites. Feed/pet/play/rest actions select the corresponding action animation.
+- Room and character are repainted together to prevent sprite trails and vertical-offset artifacts.
+
+Copy `NixiSprites.h` from the NIXI Sprite Pack v1.0 into this sketch folder before compiling. The header is a generated RGB565/PROGMEM asset file; the source pack also contains PNG sprite sheets and room previews.
