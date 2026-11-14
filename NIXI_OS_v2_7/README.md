@@ -31,11 +31,11 @@ Source prepared on branch `feature/petos-v2.7-nixi`. It has not been compiled in
 
 ## Nixi sprite integration
 
-The v2.7 sketch now uses the Nixi sprite renderer and animated room:
+The v2.7 sketch uses the Nixi sprite renderer without a room background:
 - `NixiSprites.h` is required beside `NIXI_OS_v2_7.ino`.
 - Replace the legacy `PetSprites.h` dependency; it is no longer included by the sketch.
-- HOME renders a 64x80 Nixi character over the 240x320 room, with 6 idle frames and 3 room frames.
+- HOME renders only the 64x80 Nixi character on a solid dark background; the room artwork and room animation have been removed.
 - Mood values map to the 8 expression sprites. Feed/pet/play/rest actions select the corresponding action animation.
-- Room and character are repainted together to prevent sprite trails and vertical-offset artifacts.
+- The character area is cleared before each transparent sprite frame to prevent animation trails. No room/background sprite is loaded or drawn.
 
 Copy `NixiSprites.h` from the NIXI Sprite Pack v1.0 into this sketch folder before compiling. The header is a generated RGB565/PROGMEM asset file; the source pack also contains PNG sprite sheets and room previews.
