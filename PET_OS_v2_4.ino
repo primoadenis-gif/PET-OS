@@ -627,9 +627,9 @@ void drawSystem() {
   tft.setTextColor(C_MUTED,C_BG);
   tft.setCursor(123,291);
   tft.print("UTC OFFSET / NO DST");
-  tft.setTextColor(C_CYAN,C_BG);
-  tft.setCursor(14,236);
-  tft.print(ntpSynced ? "NTP: SYNCED" : "NTP: WAITING");
+  tft.setTextColor(C_MUTED,C_BG);
+  tft.setCursor(14,66);
+  tft.print(ntpSynced ? "NTP CLOCK SYNCHRONIZED" : "NTP CLOCK WAITING");
 }
 
 // -------------------- TOOLS SCREEN --------------------
@@ -1389,6 +1389,7 @@ bool updateWeather() {
   weatherCode=cur["weather_code"]|-1;
   weatherValid=weatherCode>=0; if(!weatherValid)return false;
   weatherText=weatherCity+" "+String(weatherTemp,1)+" C "+weatherDescription(weatherCode);
+  if(weatherText.length()>35)weatherText=weatherText.substring(0,35);
   prefs.begin("petwx",false);
   prefs.putFloat("lat",weatherLat); prefs.putFloat("lon",weatherLon);
   prefs.putString("city",weatherCity); prefs.putFloat("temp",weatherTemp);
