@@ -1413,8 +1413,9 @@ bool updateWeather() {
                   weatherCity.c_str(),weatherLat,weatherLon);
   }
 
+  Serial.printf("[WEATHER] Using location: %s | lat=%.5f lon=%.5f\\n",weatherCity.c_str(),weatherLat,weatherLon);
   String url="https://api.open-meteo.com/v1/forecast?latitude="+String(weatherLat,4)+
-    "&longitude="+String(weatherLon,4)+"&current=temperature_2m,weather_code&timezone=UTC";
+    "&longitude="+String(weatherLon,4)+"&current=temperature_2m,weather_code&timezone=auto";
   JsonDocument wx;
   if(!httpsGetJson(url,wx,"OPEN-METEO")) {
     if(!weatherValid) weatherText="WEATHER: API REQUEST FAILED";
@@ -1428,6 +1429,9 @@ bool updateWeather() {
     dirty=true; return false;
   }
 
+  String wxDebug; serializeJson(wx,wxDebug);
+  Serial.println("[WEATHER] API response: "+wxDebug.substring(0,500));
+  Serial.printf("[WEATHER] API coordinates: lat=%.5f lon=%.5f\\n",wx["latitude"].as<float>(),wx["longitude"].as<float>());
   JsonObject cur=wx["current"];
   if(cur.isNull()) {
     Serial.println("[WEATHER] Open-Meteo response has no 'current' object.");
@@ -1435,8 +1439,11 @@ bool updateWeather() {
     dirty=true; return false;
   }
 
-  weatherTemp=cur["temperature_2m"]|0.0f;
+  if(cur["temperature_2m"].isNull()) Serial.println("[WEATHER] WARNING: current.temperature_2m is missing.");
+  if(cur["weather_code"].isNull()) Serial.println("[WEATHER] WARNING: current.weather_code is missing.");
+  weatherTemp=cur["temperature_2m"]|NAN;
   weatherCode=cur["weather_code"]|-1;
+  Serial.printf("[WEATHER] Parsed current: temp=%.2f code=%d time=%s\\n",weatherTemp,weatherCode,(const char*)(cur["time"]|"unknown"));
   weatherValid=weatherCode>=0;
   if(!weatherValid) {
     Serial.println("[WEATHER] Missing or invalid current.weather_code.");
