@@ -257,12 +257,10 @@ void drawHeart(int x, int y, uint16_t c) {
 
 static constexpr uint16_t SPRITE_TRANSPARENT = 0x0001;
 static uint8_t idleFrame = 0;
-static uint8_t roomFrame = 0;
 static uint8_t nixiActionFrame = 0;
 static int8_t activeNixiAction = -1;
 static uint32_t nixiActionUntil = 0;
 static uint32_t lastIdleFrame = 0;
-static uint32_t lastRoomFrame = 0;
 static uint32_t lastActionFrame = 0;
 
 void setNixiAction(NixiAction action, uint32_t duration=1100UL) {
@@ -297,10 +295,6 @@ void drawNixiCharacter() {
   } else {
     drawNixiEmotion(tft, nx, ny, nixiEmotionForMood(currentMood));
   }
-}
-
-void drawRoomBackground() {
-  drawNixiRoom(tft, roomFrame);
 }
 
 // -------------------- CYRILLIC FONT --------------------
@@ -422,9 +416,9 @@ void drawCyrillicCentered(const String &value, int x, int y,
 // -------------------- HOME SCREEN --------------------
 
 void drawHomeDynamic() {
-  // Repaint the animated room first. Character and interface are then drawn
-  // over it, so no old sprite pixels remain between animation frames.
-  drawRoomBackground();
+  // Plain solid background: no room artwork. Clear only the character area
+  // before drawing a transparent sprite so animation frames leave no trails.
+  tft.fillRect(76, 88, 88, 100, C_BG);
   drawTopBar();
 
   drawNeonButton(5, 260, 44, 43, "TASK", C_CYAN, true);
@@ -462,6 +456,7 @@ void drawHomeDynamic() {
 }
 
 void drawHome() {
+  tft.fillScreen(C_BG);
   drawHomeDynamic();
 }
 
@@ -1189,12 +1184,6 @@ void updatePet() {
     idleFrame = (idleFrame+1)%NIXI_IDLE_COUNT;
     dirty = true;
   }
-  if (currentScreen==HOME && now-lastRoomFrame>=900UL) {
-    lastRoomFrame = now;
-    roomFrame = (roomFrame+1)%NIXI_ROOM_COUNT;
-    dirty = true;
-  }
-
   if (WiFi.status()==WL_CONNECTED && ntpSynced &&
       now-lastWeatherAttempt>=WEATHER_INTERVAL) {
     lastWeatherAttempt=now;
