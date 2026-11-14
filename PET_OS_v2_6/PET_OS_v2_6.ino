@@ -1,5 +1,5 @@
 /*
-  PET OS v2.6 — Pet Companion
+  NIXI OS v2.7 — Nixi Companion
   Board: ESP32-2432S024R (2.4" CYD, ILI9341 + XPT2046)
   Portrait UI: 240 x 320
 
@@ -199,7 +199,7 @@ void drawTopBar() {
   tft.setTextSize(2);
   tft.setTextColor(C_PINK, C_BG);
   tft.setCursor(9, 8);
-  tft.print("PET");
+  tft.print("NIXI");
 
   tft.setTextColor(C_CYAN, C_BG);
   tft.print(" OS");
@@ -475,7 +475,7 @@ void drawHome() {
   drawTopBar();
 
   drawNeonButton(5, 260, 44, 43, "TASK", C_CYAN, true);
-  drawNeonButton(52, 260, 44, 43, "PET", C_PINK);
+  drawNeonButton(52, 260, 44, 43, "NIXI", C_PINK);
   drawNeonButton(99, 260, 66, 43, "MEMORY", C_PURPLE);
   drawNeonButton(168, 260, 66, 43, "SYSTEM", C_GREEN);
 
@@ -622,21 +622,21 @@ void drawSystem() {
 // -------------------- PET SCREEN --------------------
 void drawPetScreen() {
   tft.fillScreen(C_BG); drawTopBar();
-  tft.setTextColor(C_PINK,C_BG); tft.setTextSize(2); tft.setCursor(12,40); tft.print("PET");
-  drawStatBar(14,78,"HUNGER",pet.hunger,C_YELLOW);
+  tft.setTextColor(C_PINK,C_BG); tft.setTextSize(2); tft.setCursor(12,40); tft.print("NIXI");
+  drawStatBar(14,78,"СЫТОСТЬ",pet.hunger,C_YELLOW);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,78); tft.printf("%u%%",pet.hunger);
-  drawStatBar(14,112,"HAPPY",pet.happiness,C_PINK);
+  drawStatBar(14,112,"НАСТР.",pet.happiness,C_PINK);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,112); tft.printf("%u%%",pet.happiness);
-  drawStatBar(14,146,"ENERGY",pet.energy,C_CYAN);
+  drawStatBar(14,146,"ЭНЕРГ.",pet.energy,C_CYAN);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,146); tft.printf("%u%%",pet.energy);
-  drawStatBar(14,180,"HEALTH",pet.health,C_GREEN);
+  drawStatBar(14,180,"ЗДОРОВ.",pet.health,C_GREEN);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,180); tft.printf("%u%%",pet.health);
-  drawNeonButton(10,211,105,30,"FEED",C_YELLOW);
-  drawNeonButton(125,211,105,30,"PET",C_PINK);
-  drawNeonButton(10,247,105,30,"PLAY",C_CYAN);
-  drawNeonButton(125,247,105,30,"SLEEP",C_PURPLE);
+  drawNeonButton(10,211,105,30,"КОРМИТЬ",C_YELLOW);
+  drawNeonButton(125,211,105,30,"ЛАСКА",C_PINK);
+  drawNeonButton(10,247,105,30,"ИГРАТЬ",C_CYAN);
+  drawNeonButton(125,247,105,30,"ОТДЫХ",C_PURPLE);
   drawNeonButton(8,282,65,28,"BACK",C_PINK);
-  tft.setTextColor(C_MUTED,C_BG); tft.setCursor(82,291); tft.print("CARE FOR YOUR PET");
+  tft.setTextColor(C_MUTED,C_BG); tft.setCursor(82,291); tft.print("ЗАБОТА О NIXI");
 }
 
 // -------------------- MEMORY SCREEN --------------------
@@ -1430,7 +1430,7 @@ void setup() {
   setMessage("ПОМОЩНИК ГОТОВ!");
 
   Serial.println();
-  Serial.println("PET OS v2.6 Pet Companion ready.");
+  Serial.println("NIXI OS v2.7 ready.");
 
   Serial.println("Serial: help, wifi <SSID>|<PASSWORD>, weather, calibrate, tasks, notes, led, tz, reset yes");
   if(wifiSsid.length())beginWifiConnection();
