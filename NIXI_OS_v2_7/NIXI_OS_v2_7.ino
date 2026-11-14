@@ -196,9 +196,9 @@ void drawTopBar() {
   tft.fillRect(0, 0, 240, 31, C_BG);
   tft.drawFastHLine(8, 30, 224, C_PANEL2);
 
-  tft.setTextSize(2);
+  tft.setTextSize(1);
   tft.setTextColor(C_PINK, C_BG);
-  tft.setCursor(9, 8);
+  tft.setCursor(9, 12);
   tft.print("NIXI");
 
   tft.setTextColor(C_CYAN, C_BG);
@@ -206,12 +206,15 @@ void drawTopBar() {
 
   tft.setTextSize(1);
   tft.setTextColor(C_CYAN, C_BG);
-  tft.setCursor(91, 12);
+  tft.setCursor(72, 12);
   tft.print(clockText);
   tft.print("  ");
   tft.print(dateText);
   drawWeatherIcon(211,7);
 }
+
+void drawCyrillicCentered(const String &value, int x, int y,
+                          int w, uint16_t fg, uint16_t bg);
 
 void drawNeonButton(int x, int y, int w, int h,
                     const char *label, uint16_t color,
@@ -223,8 +226,8 @@ void drawNeonButton(int x, int y, int w, int h,
   tft.drawFastHLine(x + 5, y + 2, w - 10,
                     active ? C_PINK : color);
 
-  printCentered(label, x, y + h/2 - 4, w,
-                active ? C_WHITE : color, fill, 1);
+  drawCyrillicCentered(String(label), x, y + h/2 - 3, w,
+                       active ? C_WHITE : color, fill);
 }
 
 void drawStatBar(int x, int y, const char *label,
