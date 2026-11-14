@@ -1173,7 +1173,7 @@ void updatePet() {
     currentMood=choosePetMood(); savePet(); dirty=true;
   }
   if(currentScreen==PET && now-lastIdleFrame>=1000UL){lastIdleFrame=now;dirty=true;}
-  if (activeNixiAction >= 0) {
+  if (activeNixiAction >= 0 && currentScreen==HOME) {
     if (now >= nixiActionUntil) {
       activeNixiAction = -1;
       dirty = true;
