@@ -1005,11 +1005,12 @@ void handleTouch(int x,int y) {
     if(y>=211 && y<=241){
       if(x<120){pet.hunger=min(100,(int)pet.hunger+28);pet.happiness=min(100,(int)pet.happiness+4);pet.energy=max(0,(int)pet.energy-2);currentMood=LOVE;setMessage("НЯМ-НЯМ! СПАСИБО!");}
       else{pet.happiness=min(100,(int)pet.happiness+18);currentMood=LOVE;setMessage("МУРРР... КАК ПРИЯТНО!");}
-      setNixiAction(NIXI_PRAISE);setNixiAction(NIXI_PLAY,1500UL);setNixiAction(NIXI_REST,1800UL);pet.careCount++;savePet();dirty=true;return;
+      setNixiAction(x<120 ? NIXI_PRAISE : NIXI_TALK, 1100UL);
+      pet.careCount++;savePet();dirty=true;return;
     }
     if(y>=247 && y<=277){
-      if(x<120){pet.happiness=min(100,(int)pet.happiness+20);pet.energy=max(0,(int)pet.energy-15);pet.hunger=max(0,(int)pet.hunger-5);currentMood=EXCITED;setMessage("УРА! ДАВАЙ ЕЩЁ!");}
-      else{pet.energy=min(100,(int)pet.energy+30);pet.happiness=min(100,(int)pet.happiness+2);currentMood=SLEEPY;setMessage("СЛАДКИХ СНОВ...");}
+      if(x<120){pet.happiness=min(100,(int)pet.happiness+20);pet.energy=max(0,(int)pet.energy-15);pet.hunger=max(0,(int)pet.hunger-5);currentMood=EXCITED;setMessage("УРА! ДАВАЙ ЕЩЁ!");setNixiAction(NIXI_PLAY,1500UL);}
+      else{pet.energy=min(100,(int)pet.energy+30);pet.happiness=min(100,(int)pet.happiness+2);currentMood=SLEEPY;setMessage("СЛАДКИХ СНОВ...");setNixiAction(NIXI_REST,1800UL);}
       pet.careCount++;savePet();dirty=true;return;
     }
   }
