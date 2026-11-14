@@ -430,10 +430,10 @@ void drawCyrillicCentered(const String &value, int x, int y,
 void drawHomeDynamic() {
   drawTopBar();
 
-  tft.fillRoundRect(105, 43, 126, 35, 5, C_PANEL);
-  tft.drawRoundRect(105, 43, 126, 35, 5, C_PURPLE);
+  tft.fillRoundRect(8, 43, 224, 35, 5, C_PANEL);
+  tft.drawRoundRect(8, 43, 224, 35, 5, C_PURPLE);
 
-  drawCyrillicCentered(statusMessage, 109, 56, 118,
+  drawCyrillicCentered(statusMessage, 12, 56, 216,
                        C_WHITE, C_PANEL);
   tft.fillRect(95, 125, 48, 48, C_BG);
   drawPet(119, 149, idleFrame, currentMood);
@@ -622,13 +622,13 @@ void drawSystem() {
 void drawPetScreen() {
   tft.fillScreen(C_BG); drawTopBar();
   tft.setTextColor(C_PINK,C_BG); tft.setTextSize(2); tft.setCursor(12,40); tft.print("PET");
-  drawStatBar(14,78,"ГОЛОД",pet.hunger,C_YELLOW);
+  drawStatBar(14,78,"HUNGER",pet.hunger,C_YELLOW);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,78); tft.printf("%u%%",pet.hunger);
-  drawStatBar(14,112,"СЧАСТЬЕ",pet.happiness,C_PINK);
+  drawStatBar(14,112,"HAPPY",pet.happiness,C_PINK);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,112); tft.printf("%u%%",pet.happiness);
-  drawStatBar(14,146,"ЭНЕРГИЯ",pet.energy,C_CYAN);
+  drawStatBar(14,146,"ENERGY",pet.energy,C_CYAN);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,146); tft.printf("%u%%",pet.energy);
-  drawStatBar(14,180,"ЗДОРОВЬЕ",pet.health,C_GREEN);
+  drawStatBar(14,180,"HEALTH",pet.health,C_GREEN);
   tft.setTextColor(C_WHITE,C_BG); tft.setCursor(169,180); tft.printf("%u%%",pet.health);
   drawNeonButton(10,211,105,30,"ПОКОРМИТЬ",C_YELLOW);
   drawNeonButton(125,211,105,30,"ПОГЛАДИТЬ",C_PINK);
@@ -1214,7 +1214,7 @@ String weatherDescription(int c){
 String moodName(Mood m){switch(m){case HAPPY:return "РАДОСТНЫЙ";case CURIOUS:return "ЛЮБОПЫТНЫЙ";case SLEEPY:return "СОННЫЙ";case SAD:return "ГРУСТНЫЙ";case EXCITED:return "ВОСТОРЖЕННЫЙ";case LOVE:return "ЛАСКОВЫЙ";case ANGRY:return "СЕРДИТЫЙ";default:return "СМУЩЁННЫЙ";}}
 Mood choosePetMood(){if(pet.health<25||pet.hunger<15||pet.happiness<15)return SAD;if(pet.energy<20)return SLEEPY;if(pet.happiness>85)return LOVE;if(pet.hunger>70&&pet.happiness>60)return HAPPY;return CURIOUS;}
 void drawWeatherIcon(int x,int y){uint16_t c=weatherValid?C_CYAN:C_MUTED;tft.drawCircle(x+6,y+5,3,weatherValid?C_YELLOW:c);tft.drawFastHLine(x+3,y+10,14,c);tft.drawFastHLine(x+2,y+11,16,c);tft.drawPixel(x+4,y+8,c);tft.drawPixel(x+5,y+7,c);tft.drawPixel(x+11,y+8,c);tft.drawPixel(x+12,y+7,c);}
-String weatherReport(){if(!weatherValid)return "ПОГОДА В ТАГАНРОГЕ ПОКА НЕДОСТУПНА";return "В ТАГАНРОГЕ СЕЙЧАС "+weatherDescription(weatherCode)+", ТЕМПЕРАТУРА "+String((int)lroundf(weatherTemp))+" ГРАДУСОВ";}
+String weatherReport(){if(!weatherValid)return "ПОГОДА В ТАГАНРОГЕ НЕДОСТУПНА";return "ТАГАНРОГ: "+weatherDescription(weatherCode)+" "+String((int)lroundf(weatherTemp))+"C";}
 
 void saveNetworkSettings() {
   prefs.begin("petnet",false);
